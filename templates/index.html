@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube QA Assistant</title>
+    <link rel="stylesheet" href="{{url_for('static',filename = 'styles.css')}}">
+</head>
+<body>
+    <div class="container">
+        <h1>YouTube QA Assistant</h1>
+        <label for="videoUrl">Enter YouTube Video URL:</label>
+        <input type="text" id="videoUrl" placeholder="E.g., https://www.youtube.com/watch?v=VIDEO_ID">
+        <label for="query">Enter Your Question:</label>
+        <input type="text" id="query" placeholder="E.g., What is the main topic of the video?">
+        <button onclick="submitQuery()">Submit</button>
+        <div id="response"></div>
+    </div>
+
+    <script>
+        function submitQuery() {
+            const videoUrl = document.getElementById('videoUrl').value;
+            const query = document.getElementById('query').value;
+
+            fetch('/api/process_query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ video_url: videoUrl, query: query }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('response').innerText = data.response;
+            })
+            .catch(error => console.error('Error:', error));
+        }
+    </script>
+</body>
+</html>
