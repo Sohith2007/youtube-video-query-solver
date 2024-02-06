@@ -16,6 +16,7 @@
         <button onclick="submitQuery()">Submit</button>
         <button onclick="summarize()"> Summarize</button>
         <div id="response"></div>
+        <button id="copyButton" onclick="Copy()">Copy</button>
     </div>
 
     <script>
@@ -52,7 +53,31 @@
                 document.getElementById('response').innerText = data.response;
             })
             .catch(error => console.error('Error:', error));
-        } 
+        }
+        function Copy(){
+                var copyButton = document.getElementById('copyButton');
+                var responseText = document.getElementById('response');
+                // Create a textarea element to hold the text
+                var textarea = document.createElement('textarea');
+                
+                // Set the value of the textarea to the text content of the response element
+                textarea.value = responseText.textContent;
+                
+                // Append the textarea to the document body
+                document.body.appendChild(textarea);
+                
+                // Select the text inside the textarea
+                textarea.select();
+                
+                // Execute the copy command
+                document.execCommand('copy');
+                
+                // Remove the textarea from the document body
+                document.body.removeChild(textarea);
+                
+                // Provide some feedback to the user
+                alert('Text copied to clipboard!');
+            } 
     </script>
 </body>
 </html>
