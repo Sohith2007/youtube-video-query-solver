@@ -14,6 +14,7 @@
         <label for="query">Enter Your Question:</label>
         <input type="text" id="query" placeholder="E.g., What is the main topic of the video?">
         <button onclick="submitQuery()">Submit</button>
+        <button onclick="summarize()"> Summarize</button>
         <div id="response"></div>
     </div>
 
@@ -35,6 +36,23 @@
             })
             .catch(error => console.error('Error:', error));
         }
+        function summarize() {
+            const videoUrl = document.getElementById('videoUrl').value;
+            const query = "Summarize the video";
+
+            fetch('/api/process_query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ video_url: videoUrl, query: query }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('response').innerText = data.response;
+            })
+            .catch(error => console.error('Error:', error));
+        } 
     </script>
 </body>
 </html>
