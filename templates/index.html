@@ -13,10 +13,11 @@
         <input type="text" id="videoUrl" placeholder="E.g., https://www.youtube.com/watch?v=VIDEO_ID">
         <label for="query">Enter Your Question:</label>
         <input type="text" id="query" placeholder="E.g., What is the main topic of the video?">
-        <button onclick="submitQuery()">Submit</button>
+        <button onclick="submitQuery();">Submit</button>
         <button onclick="summarize()"> Summarize</button>
         <div id="response"></div>
         <button id="copyButton" onclick="Copy()">Copy</button>
+        
     </div>
 
     <script>
@@ -77,7 +78,7 @@
                 
                 // Provide some feedback to the user
                 alert('Text copied to clipboard!');
-            } 
+            }
     </script>
 </body>
 </html>
