@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify,render_template
 from functools import lru_cache
 import os
+import re
+import threading
 from urllib.parse import parse_qs, urlparse
 from langchain_community.document_loaders import YoutubeLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -29,6 +31,8 @@ def _get_cache_size() -> int:
 
 CACHE_SIZE = _get_cache_size()
 YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com"}
+VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{11}$")
+_CACHE_LOCK = threading.Lock()
 _TEXT_SPLITTER = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
 _CHAT = ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0.2)
 
@@ -52,6 +56,8 @@ def normalize_video_url(video_url: str) -> str:
             video_id = path_parts[0]
     elif host in YOUTUBE_HOSTS:
         video_id = parse_qs(parsed.query).get("v", [None])[0]
+    if video_id:
+        video_id = _validate_video_id(video_id)
     if not video_id:
         raise ValueError("video_url must contain a YouTube video id.")
     return f"https://www.youtube.com/watch?v={video_id}"
@@ -73,12 +79,18 @@ def get_split_chunks(video_url):
 
 @lru_cache(maxsize=CACHE_SIZE)
 def _get_split_chunks(normalized_url: str):
-    transcript_pages = _get_transcript_pages(normalized_url)
-    splitter = get_text_splitter()
-    split_texts = []
-    for page in transcript_pages:
-        split_texts.extend(splitter.split_text(page))
-    return tuple(split_texts)
+    with _CACHE_LOCK:
+        transcript_pages = _get_transcript_pages(normalized_url)
+        splitter = get_text_splitter()
+        split_texts = []
+        for page in transcript_pages:
+            split_texts.extend(splitter.split_text(page))
+        return tuple(split_texts)
+
+def _validate_video_id(video_id: str) -> str:
+    if not VIDEO_ID_PATTERN.match(video_id):
+        raise ValueError("video_url must contain a valid YouTube video id.")
+    return video_id
 
 @app.route('/')
 def welcome():
