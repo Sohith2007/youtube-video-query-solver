@@ -52,11 +52,11 @@ def normalize_video_url(video_url: str) -> str:
     if host == "youtu.be":
         path_parts = [segment for segment in parsed.path.split("/") if segment]
         if path_parts:
-            video_id = path_parts[0]
+            video_id = _validate_video_id(path_parts[0])
     elif host in YOUTUBE_HOSTS:
-        video_id = parse_qs(parsed.query).get("v", [None])[0]
-    if video_id:
-        video_id = _validate_video_id(video_id)
+        values = parse_qs(parsed.query).get("v")
+        if values:
+            video_id = _validate_video_id(values[0])
     if not video_id:
         raise ValueError("video_url must contain a YouTube video id.")
     return f"https://www.youtube.com/watch?v={video_id}"
@@ -73,12 +73,9 @@ def _get_transcript_pages(normalized_url: str):
         raise ValueError("Transcript could not be retrieved for the provided URL.")
     return tuple(doc.page_content for doc in transcript)
 
+@lru_cache(maxsize=CACHE_SIZE)
 def get_split_chunks(video_url):
     normalized_url = normalize_video_url(video_url)
-    return _get_split_chunks(normalized_url)
-
-@lru_cache(maxsize=CACHE_SIZE)
-def _get_split_chunks(normalized_url: str):
     transcript_pages = _get_transcript_pages(normalized_url)
     splitter = get_text_splitter()
     split_texts = []
