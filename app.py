@@ -18,26 +18,45 @@ import textwrap
 app = Flask(__name__)
 load_dotenv(find_dotenv())
 embeddings = OpenAIEmbeddings()
+_TEXT_SPLITTER = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
+_CHAT = ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0.2)
 
-@lru_cache(maxsize=1)
 def get_text_splitter():
-    return RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
+    return _TEXT_SPLITTER
 
-@lru_cache(maxsize=1)
 def get_chat():
-    return ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0.2)
+    return _CHAT
+
+def normalize_video_url(video_url: str) -> str:
+    cleaned = (video_url or "").strip()
+    if not cleaned:
+        raise ValueError("video_url must be provided.")
+    return cleaned
+
+def get_transcript_pages(video_url):
+    normalized_url = normalize_video_url(video_url)
+    return _get_transcript_pages(normalized_url)
 
 @lru_cache(maxsize=8)
-def get_transcript_pages(video_url):
-    loader = YoutubeLoader.from_youtube_url(video_url)
-    transcript = loader.load()
+def _get_transcript_pages(normalized_url: str):
+    loader = YoutubeLoader.from_youtube_url(normalized_url)
+    try:
+        transcript = loader.load()
+    except Exception:
+        _get_transcript_pages.cache_clear()
+        _get_split_chunks.cache_clear()
+        raise
     if not transcript:
         raise ValueError("Transcript could not be retrieved for the provided URL.")
     return tuple(doc.page_content for doc in transcript)
 
-@lru_cache(maxsize=8)
 def get_split_chunks(video_url):
-    transcript_pages = get_transcript_pages(video_url)
+    normalized_url = normalize_video_url(video_url)
+    return _get_split_chunks(normalized_url)
+
+@lru_cache(maxsize=8)
+def _get_split_chunks(normalized_url: str):
+    transcript_pages = _get_transcript_pages(normalized_url)
     splitter = get_text_splitter()
     split_texts = []
     for page in transcript_pages:
