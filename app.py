@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify,render_template
 from functools import lru_cache
+import os
+from urllib.parse import parse_qs, urlparse
 from langchain_community.document_loaders import YoutubeLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
@@ -18,6 +20,14 @@ import textwrap
 app = Flask(__name__)
 load_dotenv(find_dotenv())
 embeddings = OpenAIEmbeddings()
+
+def _get_cache_size() -> int:
+    try:
+        return int(os.getenv("YOUTUBE_CACHE_SIZE", "32"))
+    except ValueError:
+        return 32
+
+CACHE_SIZE = _get_cache_size()
 _TEXT_SPLITTER = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
 _CHAT = ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0.2)
 
@@ -31,21 +41,22 @@ def normalize_video_url(video_url: str) -> str:
     cleaned = (video_url or "").strip()
     if not cleaned:
         raise ValueError("video_url must be provided.")
-    return cleaned
+    parsed = urlparse(cleaned if "://" in cleaned else f"https://{cleaned}")
+    video_id = None
+    if parsed.netloc in {"youtu.be"}:
+        video_id = parsed.path.lstrip("/")
+    elif "youtube" in parsed.netloc:
+        video_id = parse_qs(parsed.query).get("v", [None])[0]
+    return f"https://www.youtube.com/watch?v={video_id}" if video_id else cleaned
 
 def get_transcript_pages(video_url):
     normalized_url = normalize_video_url(video_url)
     return _get_transcript_pages(normalized_url)
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=CACHE_SIZE)
 def _get_transcript_pages(normalized_url: str):
     loader = YoutubeLoader.from_youtube_url(normalized_url)
-    try:
-        transcript = loader.load()
-    except Exception:
-        _get_transcript_pages.cache_clear()
-        _get_split_chunks.cache_clear()
-        raise
+    transcript = loader.load()
     if not transcript:
         raise ValueError("Transcript could not be retrieved for the provided URL.")
     return tuple(doc.page_content for doc in transcript)
@@ -54,7 +65,7 @@ def get_split_chunks(video_url):
     normalized_url = normalize_video_url(video_url)
     return _get_split_chunks(normalized_url)
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=CACHE_SIZE)
 def _get_split_chunks(normalized_url: str):
     transcript_pages = _get_transcript_pages(normalized_url)
     splitter = get_text_splitter()
