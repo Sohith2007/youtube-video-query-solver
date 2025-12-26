@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify,render_template
 from functools import lru_cache
 import os
 import re
-import threading
 from urllib.parse import parse_qs, urlparse
 from langchain_community.document_loaders import YoutubeLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -31,8 +30,8 @@ def _get_cache_size() -> int:
 
 CACHE_SIZE = _get_cache_size()
 YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com"}
-VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{11}$")
-_CACHE_LOCK = threading.Lock()
+VIDEO_ID_LENGTH = 11  # YouTube video IDs are exactly 11 characters long
+VIDEO_ID_PATTERN = re.compile(rf"^[A-Za-z0-9_-]{{{VIDEO_ID_LENGTH}}}$")
 _TEXT_SPLITTER = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
 _CHAT = ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0.2)
 
@@ -66,6 +65,7 @@ def get_transcript_pages(video_url):
     normalized_url = normalize_video_url(video_url)
     return _get_transcript_pages(normalized_url)
 
+@lru_cache(maxsize=CACHE_SIZE)
 def _get_transcript_pages(normalized_url: str):
     loader = YoutubeLoader.from_youtube_url(normalized_url)
     transcript = loader.load()
@@ -79,13 +79,12 @@ def get_split_chunks(video_url):
 
 @lru_cache(maxsize=CACHE_SIZE)
 def _get_split_chunks(normalized_url: str):
-    with _CACHE_LOCK:
-        transcript_pages = _get_transcript_pages(normalized_url)
-        splitter = get_text_splitter()
-        split_texts = []
-        for page in transcript_pages:
-            split_texts.extend(splitter.split_text(page))
-        return tuple(split_texts)
+    transcript_pages = _get_transcript_pages(normalized_url)
+    splitter = get_text_splitter()
+    split_texts = []
+    for page in transcript_pages:
+        split_texts.extend(splitter.split_text(page))
+    return tuple(split_texts)
 
 def _validate_video_id(video_id: str) -> str:
     if not VIDEO_ID_PATTERN.match(video_id):
