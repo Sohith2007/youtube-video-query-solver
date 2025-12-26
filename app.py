@@ -28,6 +28,7 @@ def _get_cache_size() -> int:
         return 32
 
 CACHE_SIZE = _get_cache_size()
+YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com"}
 _TEXT_SPLITTER = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
 _CHAT = ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0.2)
 
@@ -41,14 +42,15 @@ def normalize_video_url(video_url: str) -> str:
     cleaned = (video_url or "").strip()
     if not cleaned:
         raise ValueError("video_url must be provided.")
-    parsed = urlparse(cleaned if "://" in cleaned else f"https://{cleaned}")
+    has_scheme = cleaned.startswith(("http://", "https://"))
+    parsed = urlparse(cleaned if has_scheme else f"https://{cleaned}")
     host = parsed.netloc.lower()
     video_id = None
     if host == "youtu.be":
         path_parts = [segment for segment in parsed.path.split("/") if segment]
         if path_parts:
             video_id = path_parts[0]
-    elif "youtube" in host:
+    elif host in YOUTUBE_HOSTS:
         video_id = parse_qs(parsed.query).get("v", [None])[0]
     if not video_id:
         raise ValueError("video_url must contain a YouTube video id.")
@@ -58,7 +60,6 @@ def get_transcript_pages(video_url):
     normalized_url = normalize_video_url(video_url)
     return _get_transcript_pages(normalized_url)
 
-@lru_cache(maxsize=CACHE_SIZE)
 def _get_transcript_pages(normalized_url: str):
     loader = YoutubeLoader.from_youtube_url(normalized_url)
     transcript = loader.load()
