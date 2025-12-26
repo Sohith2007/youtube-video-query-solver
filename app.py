@@ -29,7 +29,18 @@ def get_chat():
 def get_transcript_pages(video_url):
     loader = YoutubeLoader.from_youtube_url(video_url)
     transcript = loader.load()
+    if not transcript:
+        raise ValueError("Transcript could not be retrieved for the provided URL.")
     return tuple(doc.page_content for doc in transcript)
+
+@lru_cache(maxsize=8)
+def get_split_chunks(video_url):
+    transcript_pages = get_transcript_pages(video_url)
+    splitter = get_text_splitter()
+    split_texts = []
+    for page in transcript_pages:
+        split_texts.extend(splitter.split_text(page))
+    return tuple(split_texts)
 
 @app.route('/')
 def welcome():
@@ -53,10 +64,8 @@ def process_query():
     return jsonify({'response': formatted_response, 'docs': serializable_docs})
 
 def create_db_from_youtube_video_url(video_url):
-    transcript_pages = get_transcript_pages(video_url)
-    transcript_docs = [Document(page_content=page) for page in transcript_pages]
-
-    docs = get_text_splitter().split_documents(transcript_docs)
+    split_chunks = get_split_chunks(video_url)
+    docs = [Document(page_content=chunk) for chunk in split_chunks]
 
     db = FAISS.from_documents(docs, embeddings)
     return db
