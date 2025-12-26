@@ -43,7 +43,7 @@ def normalize_video_url(video_url: str) -> str:
         raise ValueError("video_url must be provided.")
     parsed = urlparse(cleaned if "://" in cleaned else f"https://{cleaned}")
     video_id = None
-    if parsed.netloc in {"youtu.be"}:
+    if parsed.netloc == "youtu.be":
         video_id = parsed.path.lstrip("/")
     elif "youtube" in parsed.netloc:
         video_id = parse_qs(parsed.query).get("v", [None])[0]
