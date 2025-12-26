@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify,render_template
+from functools import lru_cache
 from langchain_community.document_loaders import YoutubeLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
@@ -16,6 +17,8 @@ import textwrap
 app = Flask(__name__)
 load_dotenv(find_dotenv())
 embeddings = OpenAIEmbeddings()
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
+chat = ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0.2)
 
 @app.route('/')
 def welcome():
@@ -38,11 +41,11 @@ def process_query():
     
     return jsonify({'response': formatted_response, 'docs': serializable_docs})
 
+@lru_cache(maxsize=8)
 def create_db_from_youtube_video_url(video_url):
     loader = YoutubeLoader.from_youtube_url(video_url)
     transcript = loader.load()
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
     docs = text_splitter.split_documents(transcript)
 
     db = FAISS.from_documents(docs, embeddings)
@@ -51,8 +54,6 @@ def create_db_from_youtube_video_url(video_url):
 def get_response_from_query(db, query, k=4):
     docs = db.similarity_search(query, k=k)
     docs_page_content = " ".join([d.page_content for d in docs])
-
-    chat = ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0.2)
 
     template = """
         You are a helpful assistant that can answer questions about YouTube videos 
