@@ -42,12 +42,17 @@ def normalize_video_url(video_url: str) -> str:
     if not cleaned:
         raise ValueError("video_url must be provided.")
     parsed = urlparse(cleaned if "://" in cleaned else f"https://{cleaned}")
+    host = parsed.netloc.lower()
     video_id = None
-    if parsed.netloc == "youtu.be":
-        video_id = parsed.path.lstrip("/")
-    elif "youtube" in parsed.netloc:
+    if host == "youtu.be":
+        path_parts = [segment for segment in parsed.path.split("/") if segment]
+        if path_parts:
+            video_id = path_parts[0]
+    elif "youtube" in host:
         video_id = parse_qs(parsed.query).get("v", [None])[0]
-    return f"https://www.youtube.com/watch?v={video_id}" if video_id else cleaned
+    if not video_id:
+        raise ValueError("video_url must contain a YouTube video id.")
+    return f"https://www.youtube.com/watch?v={video_id}"
 
 def get_transcript_pages(video_url):
     normalized_url = normalize_video_url(video_url)
