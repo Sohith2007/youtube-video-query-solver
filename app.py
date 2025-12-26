@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify,render_template
-from functools import lru_cache
+import hashlib
+from pathlib import Path
 from langchain_community.document_loaders import YoutubeLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
@@ -17,8 +18,13 @@ import textwrap
 app = Flask(__name__)
 load_dotenv(find_dotenv())
 embeddings = OpenAIEmbeddings()
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
-chat = ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0.2)
+CACHE_DIR = Path("/tmp/youtube_vectorstores")
+
+def get_text_splitter():
+    return RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
+
+def get_chat():
+    return ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0.2)
 
 @app.route('/')
 def welcome():
@@ -41,14 +47,19 @@ def process_query():
     
     return jsonify({'response': formatted_response, 'docs': serializable_docs})
 
-@lru_cache(maxsize=8)
 def create_db_from_youtube_video_url(video_url):
+    cache_key = hashlib.sha256(video_url.encode("utf-8")).hexdigest()
+    cache_path = CACHE_DIR / cache_key
+    if cache_path.exists():
+        return FAISS.load_local(str(cache_path), embeddings, allow_dangerous_deserialization=True)
     loader = YoutubeLoader.from_youtube_url(video_url)
     transcript = loader.load()
 
-    docs = text_splitter.split_documents(transcript)
+    docs = get_text_splitter().split_documents(transcript)
 
     db = FAISS.from_documents(docs, embeddings)
+    cache_path.mkdir(parents=True, exist_ok=True)
+    db.save_local(str(cache_path))
     return db
 
 def get_response_from_query(db, query, k=4):
@@ -71,7 +82,7 @@ def get_response_from_query(db, query, k=4):
 
     chat_prompt = ChatPromptTemplate.from_messages([system_message_prompt, human_message_prompt])
 
-    chain = LLMChain(llm=chat, prompt=chat_prompt)
+    chain = LLMChain(llm=get_chat(), prompt=chat_prompt)
 
     response = chain.run(question=query, docs=docs_page_content)
     response = response.replace("\n", "")
