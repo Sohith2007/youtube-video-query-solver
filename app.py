@@ -22,9 +22,12 @@ embeddings = OpenAIEmbeddings()
 def get_text_splitter():
     return RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
 
+get_text_splitter = lru_cache(maxsize=1)(get_text_splitter)
+
 def get_chat():
     return ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0.2)
 
+get_chat = lru_cache(maxsize=1)(get_chat)
 @lru_cache(maxsize=8)
 def get_transcript_pages(video_url):
     loader = YoutubeLoader.from_youtube_url(video_url)
