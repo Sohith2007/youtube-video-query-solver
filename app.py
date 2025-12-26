@@ -1,12 +1,12 @@
 from flask import Flask, request, jsonify,render_template
-import hashlib
-from pathlib import Path
+from functools import lru_cache
 from langchain_community.document_loaders import YoutubeLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_openai import ChatOpenAI
 from langchain.chains import LLMChain
+from langchain.schema import Document
 from dotenv import find_dotenv, load_dotenv
 from langchain.prompts.chat import (
     ChatPromptTemplate,
@@ -18,13 +18,18 @@ import textwrap
 app = Flask(__name__)
 load_dotenv(find_dotenv())
 embeddings = OpenAIEmbeddings()
-CACHE_DIR = Path("/tmp/youtube_vectorstores")
 
 def get_text_splitter():
     return RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
 
 def get_chat():
     return ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0.2)
+
+@lru_cache(maxsize=8)
+def get_transcript_pages(video_url):
+    loader = YoutubeLoader.from_youtube_url(video_url)
+    transcript = loader.load()
+    return tuple(doc.page_content for doc in transcript)
 
 @app.route('/')
 def welcome():
@@ -48,18 +53,12 @@ def process_query():
     return jsonify({'response': formatted_response, 'docs': serializable_docs})
 
 def create_db_from_youtube_video_url(video_url):
-    cache_key = hashlib.sha256(video_url.encode("utf-8")).hexdigest()
-    cache_path = CACHE_DIR / cache_key
-    if cache_path.exists():
-        return FAISS.load_local(str(cache_path), embeddings, allow_dangerous_deserialization=True)
-    loader = YoutubeLoader.from_youtube_url(video_url)
-    transcript = loader.load()
+    transcript_pages = get_transcript_pages(video_url)
+    transcript_docs = [Document(page_content=page) for page in transcript_pages]
 
-    docs = get_text_splitter().split_documents(transcript)
+    docs = get_text_splitter().split_documents(transcript_docs)
 
     db = FAISS.from_documents(docs, embeddings)
-    cache_path.mkdir(parents=True, exist_ok=True)
-    db.save_local(str(cache_path))
     return db
 
 def get_response_from_query(db, query, k=4):
